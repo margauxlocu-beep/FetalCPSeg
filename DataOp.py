@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 from volumentations import *
 
 
-def get_list(dir_path):
+def get_list(dir_path): #lit et range les fichiers
     """
     This function is to read data from data dir.
     The data dir should be set as follow:
@@ -23,15 +23,17 @@ def get_list(dir_path):
         ...
     """
     print("Reading Data...")
-    dict_list = []
-
+    dict_list = [] #remplie avec les chemins des images et de leurs masques.
+    #réccupère dossiers du chemin dir_path
     path_list = glob.glob(os.path.join(dir_path, '*')) #dir_path : représente le chemin vers le dossier contenant les cas. 
 
     path_list.sort()
 
+    #Défini les noms des fichiers
     image_name = 'image.nii.gz'
     label_name = 'label.nii.gz'
 
+    #associe images & masques. Création dictionnaire contenant deux associations clé-valeur. On enregistre les chemins aux images
     for path in path_list:
         dict_list.append(
             {
@@ -41,11 +43,11 @@ def get_list(dir_path):
         )
 
     # we split the data set to train set(0.75), val set(0.05), test set(0.2)
-    train_ratio = 0.75
-    val_ratio = 0.8
+    train_ratio = 0.75 #75% des cas pour l'entraînement
+    val_ratio = 0.8 # Attention : 80% == limite set test + set validation donc 5% de val et donc bien 20% de test 
     train_num = round(len(dict_list)*train_ratio)
     val_num = round(len(dict_list)*val_ratio)
-
+    #slicing du data set
     train_list = dict_list[:train_num]
     val_list = dict_list[train_num:val_num]
     test_list = dict_list[val_num:]
@@ -60,6 +62,7 @@ def get_augmentation():
     https://github.com/ashawkey/volumentations
     It provide a various augmentation strategy in 3D data
     """
+    #retirer les # qui sont les mouvements pour la data augmentation si on veut l'utiliser / si besoin pour nb de cas
     return Compose([
         # Flip(0),
         # Flip(1),
@@ -80,24 +83,24 @@ class TrainGenerator(object):
         self.patch_size = patch_size
         self.aug = get_augmentation()
 
-    def get_item(self):
+    def get_item(self): #pour obtenir un nouveau batch d'entraînement
 
-        dict_list = random.sample(self.data_list, self.batch_size)
-
+        dict_list = random.sample(self.data_list, self.batch_size) #choisit batch_size éléments dans la liste
+        #extraction des fichiers
         image_list = [dict_item['image_path'] for dict_item in dict_list]
         label_list = [dict_item['label_path'] for dict_item in dict_list]
 
-        image_patch, label_patch = self._sample_patch(image_list, label_list)
+        image_patch, label_patch = self._sample_patch(image_list, label_list) #génère les patches
 
-        return image_patch, label_patch
+        return image_patch, label_patch # retourne deux tableaux
 
-    def _sample_patch(self, image_list, clean_list):
+    def _sample_patch(self, image_list, clean_list): #extractions des patches 3D
         half_size = self.patch_size // 2
         image_patch_list = []
         label_patch_list = []
 
-        for image_path, clean_path in zip(image_list, clean_list):
-            image = nib.load(image_path).get_fdata()
+        for image_path, clean_path in zip(image_list, clean_list): #parcours lites et extrait les chemins
+            image = nib.load(image_path).get_fdata() #Récupère les valeurs du volume sous forme de tableau NumPy
             label = nib.load(clean_path).get_fdata()
 
             # here we augment the corresponding data and label
@@ -107,17 +110,19 @@ class TrainGenerator(object):
 
             w, h, d = image.shape
 
-            label_index = np.where(label == 1)
-            length_label = label_index[0].shape[0]
+            #Localiser les voxels de la structure à segmenter
+            label_index = np.where(label == 1) #récupère les coordonnées de tous les voxels dont la valeur est égale à 1 => 3 tableaux = coordonnées sur les axes x, y et z
+            length_label = label_index[0].shape[0] #compte le nombre de voxels appartenant à la classe 1
 
+            #choisir le centre du patch
             p = random.random()
             # we set a probability(p) to make most of the center of sampling patches
             # locate to the regions with label not background
             if p < 0.875:
-                sample_id = random.randint(1, length_label-1)
-                x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id]
+                sample_id = random.randint(1, length_label-1) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
+                x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id] #coordonnées du voxel séléctionné. Il devient le centre théorique du patch.
             else:
-                x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d)
+                x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d) #sinon centre aléatoire
 
             # here we prevent the sampling patch overflow volume
             if x < half_size:
