@@ -25,7 +25,7 @@ def get_list(dir_path):
     print("Reading Data...")
     dict_list = []
 
-    path_list = glob.glob(os.path.join(dir_path, '*'))
+    path_list = glob.glob(os.path.join(dir_path, '*')) #dir_path : représente le chemin vers le dossier contenant les cas. 
 
     path_list.sort()
 
