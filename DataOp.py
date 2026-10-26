@@ -83,10 +83,10 @@ class TrainGenerator(object):
         self.patch_size = patch_size
         self.aug = get_augmentation()
 
-    def get_item(self): #pour obtenir un nouveau batch d'entraînement
+    def get_item(self): #pour obtenir un nouveau batch (de patient) d'entraînement
 
         dict_list = random.sample(self.data_list, self.batch_size) #choisit batch_size éléments dans la liste
-        #extraction des fichiers
+        #extraction des fichiers (réccupère les chemins des fichiers sélectionnés)
         image_list = [dict_item['image_path'] for dict_item in dict_list]
         label_list = [dict_item['label_path'] for dict_item in dict_list]
 
@@ -101,27 +101,27 @@ class TrainGenerator(object):
 
         for image_path, clean_path in zip(image_list, clean_list): #parcours lites et extrait les chemins
             image = nib.load(image_path).get_fdata() #Récupère les valeurs du volume sous forme de tableau NumPy
-            label = nib.load(clean_path).get_fdata()
+            label = nib.load(clean_path).get_fdata() #Les deux volumes doivent avoir des dimensions compatibles et être spatialement alignés (label et image)
 
             # here we augment the corresponding data and label
-            data = {'image': image, 'label': label}
-            aug_data = self.aug(**data)
+            data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
+            aug_data = self.aug(**data) #application des mêmes transformations que image et label
             image, label = aug_data['image'], aug_data['label']
 
             w, h, d = image.shape
 
             #Localiser les voxels de la structure à segmenter
-            label_index = np.where(label == 1) #récupère les coordonnées de tous les voxels dont la valeur est égale à 1 => 3 tableaux = coordonnées sur les axes x, y et z
+            label_index = np.where(label == 1) #récupère les coordonnées de tous les voxels dont la valeur du masque est égale à 1 (ie voxel dans structure d'intérêt)=> 3 tableaux = coordonnées sur les axes x, y et z
             length_label = label_index[0].shape[0] #compte le nombre de voxels appartenant à la classe 1
 
             #choisir le centre du patch
             p = random.random()
             # we set a probability(p) to make most of the center of sampling patches
             # locate to the regions with label not background
-            if p < 0.875:
+            if p < 0.875: #Le centre du patch est choisi parmi les voxels dont le masque vaut 1. L'objectif est de privilégier les régions contenant la structure anatomique à apprendre.
                 sample_id = random.randint(1, length_label-1) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
                 x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id] #coordonnées du voxel séléctionné. Il devient le centre théorique du patch.
-            else:
+            else: #Le centre du patch est choisi aléatoirement dans l'ensemble du volume. Cela permet aussi de sélectionner des régions d'arrière-plan et d'apprendre au réseau à les reconnaître.
                 x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d) #sinon centre aléatoire
 
             # here we prevent the sampling patch overflow volume
