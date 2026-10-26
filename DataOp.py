@@ -144,11 +144,14 @@ class TrainGenerator(object):
             image_patch = image[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
             label_patch = label[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
 
+            #ajout des dimensions aux tableaux (pour réseau convolutif sous PyTorch (taille du batch, nb de cannaux, X,Y, Z) où X,Y,Z sont les dimensions spatiales)
             image_patch_list.append(image_patch[np.newaxis, np.newaxis, ...])
             label_patch_list.append(label_patch[np.newaxis, np.newaxis, ...])
 
+        #Regrouper patches en batches
         image_out = np.concatenate(image_patch_list, axis=0)
         label_out = np.concatenate(label_patch_list, axis=0)
 
+        #renvoie deux tableaux NumPy, patches d'images médicales et patches des masques associés
         return image_out, label_out
 
