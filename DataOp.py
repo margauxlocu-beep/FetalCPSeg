@@ -139,7 +139,8 @@ class TrainGenerator(object):
                 z = half_size
             elif z > d-half_size:
                 z = d-half_size-1
-
+            
+            #extraction des patches
             image_patch = image[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
             label_patch = label[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
 
