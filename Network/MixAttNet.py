@@ -2,50 +2,54 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-
+#créer des blocs capables de recevoir des tenseurs contenant in_chan canal et produire un tenseur contenant out_chan canaux.
+#ici on créer juste les blocks nécessaires ensuitesau réseau !
 def convolution_block(in_chan, out_chan, ksize=3, pad=1, stride=1, bias=False):
     """
     Convolution Block
     Convolution + Normalization + NonLinear
     """
     return nn.Sequential(
-        nn.Conv3d(in_chan, out_chan, kernel_size=ksize, padding=pad, stride=stride, bias=bias),
-        nn.BatchNorm3d(out_chan),
-        nn.PReLU()
+        nn.Conv3d(in_chan, out_chan, kernel_size=ksize, padding=pad, stride=stride, bias=bias), #extrait les canaux de caractéristiques
+        nn.BatchNorm3d(out_chan), #normalise les caractéristiques
+        nn.PReLU() #activation non linéaire
     )
 
 
+#augmenter ou ajuster la résolution spatiale d'un tenseur 3D (surtout pour le décodeur ensuite)
 def up_sample3d(x, t, mode="trilinear"):
     """
     3D Up Sampling
     """
     return F.interpolate(x, t.size()[2:], mode=mode, align_corners=False)
 
-
+#Block résuduel du réseau de neurones
 class ResStage(nn.Module):
     """
     3D Res stage
     """
+    #prépare les couches du composant.
     def __init__(self, in_chan, out_chan, stride=1):
         super(ResStage, self).__init__()
         self.conv1 = convolution_block(in_chan, out_chan, stride=stride)
         self.conv2 = nn.Sequential(
             nn.Conv3d(out_chan, out_chan, kernel_size=3, padding=1),
             nn.BatchNorm3d(out_chan)
-        )
+        ) #pas de fonction d'activation après la deuxieme convolution car sera appliquée après l'addition résiduelle.
         self.non_linear = nn.PReLU()
         self.down_sample = nn.Sequential(
             nn.Conv3d(in_chan, out_chan, kernel_size=1, stride=stride, bias=False),
-            nn.BatchNorm3d(out_chan))
+            nn.BatchNorm3d(out_chan)) #correspond aux connexions résiduelles
 
+    #calculs effectués lorsque des données traversent ce composant.
     def forward(self, x):
-        out = self.conv2(self.conv1(x))
-        shortcut = self.down_sample(x)
+        out = self.conv2(self.conv1(x)) #effectue convolutions de la branche principale
+        shortcut = self.down_sample(x) 
         out = self.non_linear(out + shortcut)
 
         return out
 
-
+#réduit le nombre de canaux (convolution de 1x1)
 def down_stage(in_chan, out_chan):
     return nn.Sequential(
         nn.Conv3d(in_chan, out_chan, kernel_size=1, bias=False),
@@ -53,33 +57,38 @@ def down_stage(in_chan, out_chan):
         nn.PReLU()
     )
 
-
+#convolution avec plusieurs tailles de noyaux
 class MixBlock(nn.Module):
+    #prépare les couches du composant.
     def __init__(self, in_chan, out_chan):
-        super(MixBlock, self).__init__()
+        super(MixBlock, self).__init__() 
+        #4 branches parrallèles avec différentes tailles de noayaux de convolution et de padding.
         self.conv1 = nn.Conv3d(in_chan, out_chan // 4, 3, padding=1, bias=False)
         self.conv3 = nn.Conv3d(in_chan, out_chan // 4, 5, padding=2, bias=False)
         self.conv5 = nn.Conv3d(in_chan, out_chan // 4, 7, padding=3, bias=False)
         self.conv7 = nn.Conv3d(in_chan, out_chan // 4, 9, padding=4, bias=False)
+        #normalisation de chaque branche
         self.bn1 = nn.BatchNorm3d(out_chan // 4)
         self.bn3 = nn.BatchNorm3d(out_chan // 4)
         self.bn5 = nn.BatchNorm3d(out_chan // 4)
         self.bn7 = nn.BatchNorm3d(out_chan // 4)
+        #definition de la fonction d'activation
         self.nonlinear = nn.PReLU()
 
     def forward(self, x):
-        k1 = self.bn1(self.conv1(x))
+        k1 = self.bn1(self.conv1(x)) #calcul des 4 branches
         k3 = self.bn3(self.conv3(x))
         k5 = self.bn5(self.conv5(x))
         k7 = self.bn7(self.conv7(x))
-        return self.nonlinear(torch.cat((k1, k3, k5, k7), dim=1))
+        return self.nonlinear(torch.cat((k1, k3, k5, k7), dim=1)) #concaténation 
 
+#répartition d'un nombre de canaux en plusiseurs groupes ; fonction  utile à la classe suivante
 def _SplitChannels(channels, num_groups):
     split_channels = [channels//num_groups for _ in range(num_groups)]
     split_channels[0] += channels - sum(split_channels)
     return split_channels
 
-
+#bloc multi-échelles pour mécanismes d'attention du réseau
 class FastMixBlock(nn.Module):
     """
     modified from https://github.com/romulus0914/MixNet-PyTorch/blob/master/mixnet.py
@@ -88,11 +97,14 @@ class FastMixBlock(nn.Module):
         super(FastMixBlock, self).__init__()
         kernel_size = [1, 3, 5, 7]
         self.num_groups = len(kernel_size)
+        #Calcul du nombre de canaux d'entrée et de sortie pour chaque branche
         self.split_in_channels = _SplitChannels(in_chan, self.num_groups)
         self.split_out_channels = _SplitChannels(out_chan, self.num_groups)
 
-        self.grouped_conv = nn.ModuleList()
+        #création des convolutions
+        self.grouped_conv = nn.ModuleList() #enregister les couches et leurs paramètres
         for i in range(self.num_groups):
+            #ajout bloc de convolution
             self.grouped_conv.append(
                 nn.Sequential(
                     nn.Conv3d(
