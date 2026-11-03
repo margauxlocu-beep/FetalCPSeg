@@ -42,11 +42,16 @@ def train_batch(net, optimizer, loader, patch_size, batch_size):
 
     image, label = loader.get_item()
 
-    # here we calculate the positive ratio in the input batch data
-    if np.where(label == 1)[0].shape[0] == 0:
+    # Nombre total de voxels dans le batch
+    nb_voxels = batch_size * np.prod(patch_size)
+
+    # Nombre de voxels appartenant à la classe 1
+    nb_positifs = np.count_nonzero(label == 1)
+
+    if nb_positifs == 0:
         weight = 1
     else:
-        weight = batch_size*patch_size*patch_size*patch_size/np.where(label == 1)[0].shape[0]
+        weight = nb_voxels / nb_positifs
 
     image = Variable(torch.from_numpy(image).cuda())
     label = Variable(torch.from_numpy(label).cuda())
@@ -93,25 +98,64 @@ def val(net, val_list, patch_size):
             mean = zone.mean()
             std = zone.std()
             image[image > 0] = (zone - mean) / (std + 1e-8)
-            
+
         pre_count = np.zeros_like(image, dtype=np.float32)
         predict = np.zeros_like(image, dtype=np.float32)
 
         w, h, d = image.shape
-        x_list = np.squeeze(np.concatenate((np.arange(0, w - patch_size, patch_size // 4)[:, np.newaxis],
-                                            np.array([w - patch_size])[:, np.newaxis])).astype(np.int))
-        y_list = np.squeeze(np.concatenate((np.arange(0, h - patch_size, patch_size // 4)[:, np.newaxis],
-                                            np.array([h - patch_size])[:, np.newaxis])).astype(np.int))
-        z_list = np.squeeze(np.concatenate((np.arange(0, d - patch_size, patch_size // 4)[:, np.newaxis],
-                                            np.array([d - patch_size])[:, np.newaxis])).astype(np.int))
-        for x in x_list:
-            for y in y_list:
-                for z in z_list:
-                    image_patch = image[x:x+patch_size, y:y+patch_size, z:z+patch_size].astype(np.float32)
-                    image_patch_tensor = torch.from_numpy(image_patch[np.newaxis, np.newaxis, ...]).cuda()
-                    pre_patch = net(image_patch_tensor).squeeze()
-                    predict[x:x+patch_size, y:y+patch_size, z:z+patch_size] += pre_patch.cpu().data.numpy()
-                    pre_count[x:x+patch_size, y:y+patch_size, z:z+patch_size] += 1
+        # Récupérer les dimensions du patch
+        patch_w, patch_h, patch_d = patch_size
+
+        # Fonction pour déterminer les positions des patches
+        def positions(dimension, taille_patch):
+            if dimension < taille_patch:
+                raise ValueError("Patch plus grand que le volume")
+
+            pas = max(1, taille_patch // 4)
+
+            return sorted(set(
+                list(range(0, dimension - taille_patch + 1, pas))
+                + [dimension - taille_patch]
+            ))
+
+        # Positions de départ sur chaque axe
+        x_list = positions(w, patch_w)
+        y_list = positions(h, patch_h)
+        z_list = positions(d, patch_d)
+
+        with torch.no_grad():
+            for x in x_list:
+                for y in y_list:
+                    for z in z_list:
+
+                        # Extraction du patch
+                        image_patch = image[
+                            x:x+patch_w,
+                            y:y+patch_h,
+                            z:z+patch_d
+                        ].astype(np.float32)
+
+                        # Conversion en tenseur PyTorch
+                        image_patch_tensor = torch.from_numpy(
+                            image_patch[np.newaxis, np.newaxis, ...]
+                        ).cuda()
+
+                        # Prédiction du réseau (version binaire provisoire)
+                        pre_patch = net(image_patch_tensor)[0, 0].cpu().numpy()
+
+                        # Ajouter la prédiction au volume
+                        predict[
+                            x:x+patch_w,
+                            y:y+patch_h,
+                            z:z+patch_d
+                        ] += pre_patch
+
+                        # Compter combien de fois chaque voxel est prédit
+                        pre_count[
+                            x:x+patch_w,
+                            y:y+patch_h,
+                            z:z+patch_d
+                        ] += 1
         predict /= pre_count
         metric_meter.update(dice_score(predict, label))
 
@@ -176,7 +220,7 @@ if __name__ == '__main__':
             self.val_fre = 200
             self.pre_fre = 20
 
-            self.patch_size = 64
+            self.patch_size = (64, 64, 16)
 
             self.data_path = 'Data/'
             self.output_path = 'output/'

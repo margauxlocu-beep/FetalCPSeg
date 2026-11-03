@@ -102,7 +102,17 @@ class TrainGenerator(object):
         return image_patch, label_patch # retourne deux tableaux
 
     def _sample_patch(self, image_list, clean_list): #extractions des patches 3D
-        half_size = self.patch_size // 2
+        # Dimensions du patch : largeur, hauteur, profondeur
+        patch_w, patch_h, patch_d = self.patch_size
+
+        # Moitié de chaque dimension
+        half_w = patch_w // 2
+        half_h = patch_h // 2
+        half_d = patch_d // 2
+
+        image_patch_list = []
+        label_patch_list = []
+        
         image_patch_list = []
         label_patch_list = []
 
@@ -142,20 +152,28 @@ class TrainGenerator(object):
                 x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d) #sinon centre aléatoire
 
             # here we prevent the sampling patch overflow volume
-            if x < half_size:
-                x = half_size
-            elif x > w-half_size:
-                x = w-half_size-1
+            # Vérifier que le volume est assez grand
+            if w < patch_w or h < patch_h or d < patch_d:
+                raise ValueError("Volume plus petit que le patch demandé")
 
-            if y < half_size:
-                y = half_size
-            elif y > h-half_size:
-                y = h-half_size-1
+            # Empêcher le patch de dépasser les limites du volume
+            x = max(half_w, min(int(x), w - half_w))
+            y = max(half_h, min(int(y), h - half_h))
+            z = max(half_d, min(int(z), d - half_d))
 
-            if z < half_size:
-                z = half_size
-            elif z > d-half_size:
-                z = d-half_size-1
+            # Extraction du patch de l'IRM
+            image_patch = image[
+                x-half_w:x+half_w,
+                y-half_h:y+half_h,
+                z-half_d:z+half_d
+            ].astype(np.float32)
+
+            # Extraction du patch correspondant dans le masque
+            label_patch = label[
+                x-half_w:x+half_w,
+                y-half_h:y+half_h,
+                z-half_d:z+half_d
+            ].astype(np.float32)
             
             #extraction des patches
             image_patch = image[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
