@@ -34,6 +34,15 @@ for idx, data_dict in enumerate(test_list):
 
     image = nib.load(image_path).get_fdata()
 
+    #Normalisation de l'IRM
+    image = image.astype(np.float32)
+    zone = image[image > 0]
+
+    if zone.size > 0:
+        mean = zone.mean()
+        std = zone.std()
+        image[image > 0] = (zone - mean) / (std + 1e-8)
+
     w, h, d = image.shape
 
     pre_count = np.zeros_like(image, dtype=np.float32)
