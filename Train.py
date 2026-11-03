@@ -81,8 +81,19 @@ def val(net, val_list, patch_size):
 
         image_path = data_dict['image_path']
         label_path = data_dict['label_path']
+
         image = nib.load(image_path).get_fdata()
         label = nib.load(label_path).get_fdata()
+
+        #Normalisation de l'IRM
+        image = image.astype(np.float32)
+        zone = image[image > 0]
+
+        if zone.size > 0:
+            mean = zone.mean()
+            std = zone.std()
+            image[image > 0] = (zone - mean) / (std + 1e-8)
+            
         pre_count = np.zeros_like(image, dtype=np.float32)
         predict = np.zeros_like(image, dtype=np.float32)
 
