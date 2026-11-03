@@ -10,16 +10,21 @@ from Network import MixAttNet
 from Utils import AvgMeter, check_dir
 from DataOp import get_list
 
+from glob import glob
 
 torch.cuda.set_device(0)
 
 output_path = os.path.join('output/')
 
-_, test_list = get_list(dir_path='Data/')
+test_list = [
+    {"image_path": path}
+    for path in sorted(glob("Data_test/case*/image.nii.gz"))
+    ]
+
 net = MixAttNet().cuda()
 net.load_state_dict(torch.load(output_path+'/ckpt/best_val.pth.gz'))
 
-patch_size = 64
+patch_size = (64, 64, 16)
 spacing = 4
 
 save_path = os.path.join(output_path, 'save_data')
@@ -48,21 +53,59 @@ for idx, data_dict in enumerate(test_list):
     pre_count = np.zeros_like(image, dtype=np.float32)
     predict = np.zeros_like(image, dtype=np.float32)
 
-    x_list = np.squeeze(np.concatenate((np.arange(0, w - patch_size, patch_size // spacing)[:, np.newaxis],
-                                        np.array([w - patch_size])[:, np.newaxis])).astype(np.int))
-    y_list = np.squeeze(np.concatenate((np.arange(0, h - patch_size, patch_size // spacing)[:, np.newaxis],
-                                        np.array([h - patch_size])[:, np.newaxis])).astype(np.int))
-    z_list = np.squeeze(np.concatenate((np.arange(0, d - patch_size, patch_size // spacing)[:, np.newaxis],
-                                        np.array([d - patch_size])[:, np.newaxis])).astype(np.int))
+    # Dimensions du patch
+    patch_w, patch_h, patch_d = patch_size
+
+    def positions(dimension, taille_patch):
+        if dimension < taille_patch:
+            raise ValueError("Patch plus grand que le volume")
+
+        pas = max(1, taille_patch // spacing)
+
+        return sorted(set(
+            list(range(0, dimension - taille_patch + 1, pas))
+            + [dimension - taille_patch]
+        ))
+
+    x_list = positions(w, patch_w)
+    y_list = positions(h, patch_h)
+    z_list = positions(d, patch_d)
+    
     start_time = time.time()
 
-    for x in x_list:
-        for y in y_list:
-            for z in z_list:
-                image_patch = image[x:x + patch_size, y:y + patch_size, z:z + patch_size].astype(np.float32)
-                patch_tensor = torch.from_numpy(image_patch[np.newaxis, np.newaxis, ...]).cuda()
-                predict[x:x + patch_size, y:y + patch_size, z:z + patch_size] += net(patch_tensor).squeeze().cpu().data.numpy()
-                pre_count[x:x + patch_size, y:y + patch_size, z:z + patch_size] += 1
+    with torch.no_grad():
+        for x in x_list:
+            for y in y_list:
+                for z in z_list:
+
+                    # Extraction du patch 64x64x16
+                    image_patch = image[
+                        x:x+patch_w,
+                        y:y+patch_h,
+                        z:z+patch_d
+                    ].astype(np.float32)
+
+                    # Conversion en tenseur PyTorch
+                    patch_tensor = torch.from_numpy(
+                        image_patch[np.newaxis, np.newaxis, ...]
+                    ).cuda()
+
+                    # Prédiction du réseau
+                    pre_patch = net(patch_tensor)[0, 0].cpu().numpy()
+
+                    # Accumuler les prédictions
+                    predict[
+                        x:x+patch_w,
+                        y:y+patch_h,
+                        z:z+patch_d
+                    ] += pre_patch
+
+                    # Compter les prédictions
+                    pre_count[
+                        x:x+patch_w,
+                        y:y+patch_h,
+                        z:z+patch_d
+                    ] += 1
 
     predict /= pre_count
 
