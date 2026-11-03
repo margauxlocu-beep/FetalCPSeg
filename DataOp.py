@@ -107,8 +107,18 @@ class TrainGenerator(object):
         label_patch_list = []
 
         for image_path, clean_path in zip(image_list, clean_list): #parcours lites et extrait les chemins
+            #1. Chargement de l'IRM et du masque
             image = nib.load(image_path).get_fdata() #Récupère les valeurs du volume sous forme de tableau NumPy
             label = nib.load(clean_path).get_fdata() #Les deux volumes doivent avoir des dimensions compatibles et être spatialement alignés (label et image)
+
+            #2. Normalisation de l'IRM
+            image = image.astype(np.float32)
+            zone = image[image > 0]
+            if zone.size > 0:
+                mean = zone.mean()
+                std = zone.std()
+                # Normalisation des voxels non nuls
+                image[image > 0] = (zone - mean) / (std + 1e-8)
 
             # here we augment the corresponding data and label
             data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
