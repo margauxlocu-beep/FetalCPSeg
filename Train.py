@@ -114,7 +114,7 @@ def main(args):
     ckpt_path = os.path.join(args.output_path, "ckpt")
     check_dir(ckpt_path)
 
-    train_list, test_list = get_list(dir_path=args.data_path)
+    train_list, val_list, test_list = get_list(dir_path=args.data_path)
 
     train_generator = TrainGenerator(train_list,
                                      batch_size=args.batch_size,
@@ -141,7 +141,7 @@ def main(args):
             loss_meter.reset()
 
         if iteration % args.val_fre == 0:
-            val_dice = val(net, test_list, args.patch_size)
+            val_dice = val(net, val_list, args.patch_size)
             if val_dice > best_metric:
                 torch.save(net.state_dict(), os.path.join(ckpt_path, "best_val.pth.gz"))
                 best_metric = val_dice
