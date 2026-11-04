@@ -14,6 +14,9 @@ from glob import glob
 
 torch.cuda.set_device(0)
 
+# Utilisation du GPU si disponible, sinon du CPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 output_path = os.path.join('output/')
 
 test_list = [
@@ -21,6 +24,7 @@ test_list = [
     for path in sorted(glob("Data_test/case*/image.nii.gz"))
     ]
 
+# Chargement du réseau
 net = MixAttNet().cuda()
 net.load_state_dict(torch.load(output_path+'/ckpt/best_val.pth.gz'))
 
@@ -37,7 +41,9 @@ test_meter = AvgMeter()
 for idx, data_dict in enumerate(test_list):
     image_path = data_dict['image_path']
 
-    image = nib.load(image_path).get_fdata()
+    #conserver l'affine de l'IRM
+    image_nii_source = nib.load(image_path)
+    image = image_nii_source.get_fdata()
 
     #Normalisation de l'IRM
     image = image.astype(np.float32)
@@ -48,13 +54,38 @@ for idx, data_dict in enumerate(test_list):
         std = zone.std()
         image[image > 0] = (zone - mean) / (std + 1e-8)
 
+    # Dimensions originales
     w, h, d = image.shape
-
-    pre_count = np.zeros_like(image, dtype=np.float32)
-    predict = np.zeros_like(image, dtype=np.float32)
 
     # Dimensions du patch
     patch_w, patch_h, patch_d = patch_size
+
+    # ajouter du padding si nécessaire
+    padding = [
+        (0, max(0, patch_w - w)),
+        (0, max(0, patch_h - h)),
+        (0, max(0, patch_d - d))
+    ]
+
+    image_pad = np.pad(
+        image,
+        padding,
+        mode='constant',
+        constant_values=0
+    )
+    # Dimensions après padding
+    W, H, D = image_pad.shape
+
+    # initialiser 5 cartes de probabilités
+    predict = np.zeros(
+        (5, W, H, D),
+        dtype=np.float32
+    )
+
+    pre_count = np.zeros(
+        (W, H, D),
+        dtype=np.float32
+    )
 
     def positions(dimension, taille_patch):
         if dimension < taille_patch:
@@ -90,36 +121,90 @@ for idx, data_dict in enumerate(test_list):
                         image_patch[np.newaxis, np.newaxis, ...]
                     ).cuda()
 
-                    # Prédiction du réseau
-                    pre_patch = net(patch_tensor)[0, 0].cpu().numpy()
+                    # MODIFICATION 4 : récupérer les 5 classes
+                    outputs = net(patch_tensor)
 
-                    # Accumuler les prédictions
+                    # Si le réseau renvoie plusieurs sorties,
+                    # on utilise la sortie principale
+                    if isinstance(outputs, (list, tuple)):
+                        outputs = outputs[0]
+
+                    if outputs.ndim != 5 or outputs.shape[1] != 5:
+                        raise ValueError(
+                            "Le réseau doit produire 5 canaux. "
+                            f"Forme obtenue : {outputs.shape}"
+                        )
+
+                    # Transformer les logits en probabilités
+                    proba_patch = torch.softmax(
+                        outputs, dim=1
+                    )[0].cpu().numpy()
+
+                    #accumuler les 5 probabilités
                     predict[
+                        :,
                         x:x+patch_w,
                         y:y+patch_h,
                         z:z+patch_d
-                    ] += pre_patch
+                    ] += proba_patch
 
-                    # Compter les prédictions
+                    # Compter les prédictions par voxel
                     pre_count[
                         x:x+patch_w,
                         y:y+patch_h,
                         z:z+patch_d
                     ] += 1
 
-    predict /= pre_count
 
-    predict = np.squeeze(predict)
-    image = np.squeeze(image)
+    #moyenne des probabilités
+    if np.any(pre_count == 0):
+        raise RuntimeError("Certains voxels n'ont pas été couverts.")
 
-    predict[predict > 0.5] = 1
-    predict[predict < 0.5] = 0
+    predict /= pre_count[np.newaxis, ...]
 
-    image_nii = nib.Nifti1Image(image, affine=None)
-    predict_nii = nib.Nifti1Image(predict, affine=None)
+    # choisir la classe la plus probable
+    predict = np.argmax(
+        predict, axis=0
+    ).astype(np.uint8)
 
-    check_dir(os.path.join(save_path, '{}'.format(idx)))
-    nib.save(image_nii, os.path.join(save_path, '{}/image.nii.gz'.format(idx)))
-    nib.save(predict_nii, os.path.join(save_path, '{}/predict.nii.gz'.format(idx)))
+    #retirer le padding
+    predict = predict[:w, :h, :d]
 
-    print("[{}] Testing Finished, Cost {:.2f}s".format(idx, time.time()-start_time))
+    #conserver l'affine originale
+    image_nii = nib.Nifti1Image(
+        image,
+        affine=image_nii_source.affine,
+        header=image_nii_source.header.copy()
+    )
+    image_nii.set_data_dtype(np.float32)
+
+    predict_nii = nib.Nifti1Image(
+        predict,
+        affine=image_nii_source.affine,
+        header=image_nii_source.header.copy()
+    )
+    predict_nii.set_data_dtype(np.uint8)
+
+    # Sauvegarde des fichiers
+    case_path = os.path.join(save_path, str(idx))
+    check_dir(case_path)
+
+    nib.save(
+        image_nii,
+        os.path.join(case_path, 'image.nii.gz')
+    )
+
+    nib.save(
+        predict_nii,
+        os.path.join(case_path, 'predict.nii.gz')
+    )
+
+    print("Dimensions IRM :", image.shape)
+    print("Dimensions segmentation :", predict.shape)
+    print("Classes prédites :", np.unique(predict))
+
+    print(
+        "[{}] Testing Finished, Cost {:.2f}s".format(
+            idx, time.time() - start_time
+        )
+    )
