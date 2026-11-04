@@ -63,6 +63,7 @@ def train_batch(net, optimizer, loader, patch_size, batch_size):
 def val(net, val_list, patch_size):
     net.eval()
     metric_meter = AvgMeter()
+    device = next(net.parameters()).device
 
     for data_dict in val_list:
 
@@ -72,7 +73,7 @@ def val(net, val_list, patch_size):
         image = nib.load(image_path).get_fdata()
         label = nib.load(label_path).get_fdata()
 
-        #Normalisation de l'IRM
+        # 1. Normalisation de l'IRM
         image = image.astype(np.float32)
         zone = image[image > 0]
 
@@ -81,65 +82,136 @@ def val(net, val_list, patch_size):
             std = zone.std()
             image[image > 0] = (zone - mean) / (std + 1e-8)
 
-        pre_count = np.zeros_like(image, dtype=np.float32)
-        predict = np.zeros_like(image, dtype=np.float32)
-
+        # Dimensions originales
         w, h, d = image.shape
-        # Récupérer les dimensions du patch
+
+        # Dimensions du patch
         patch_w, patch_h, patch_d = patch_size
 
-        # Fonction pour déterminer les positions des patches
-        def positions(dimension, taille_patch):
-            if dimension < taille_patch:
-                raise ValueError("Patch plus grand que le volume")
+        # 2. Padding si le volume est trop petit
+        padding = [
+            (0, max(0, patch_w - w)),
+            (0, max(0, patch_h - h)),
+            (0, max(0, patch_d - d))
+        ]
 
+        image_pad = np.pad(
+            image, padding, mode='constant'
+        )
+
+        W, H, D = image_pad.shape
+
+        # 3. Initialiser les 5 cartes de probabilités
+        predict = np.zeros(
+            (5, W, H, D), dtype=np.float32
+        )
+
+        # Nombre de prédictions reçues par voxel
+        pre_count = np.zeros(
+            (W, H, D), dtype=np.float32
+        )
+
+        # 4. Positions des patches
+        def positions(dimension, taille_patch):
             pas = max(1, taille_patch // 4)
 
             return sorted(set(
-                list(range(0, dimension - taille_patch + 1, pas))
+                list(range(
+                    0,
+                    dimension - taille_patch + 1,
+                    pas
+                ))
                 + [dimension - taille_patch]
             ))
 
-        # Positions de départ sur chaque axe
-        x_list = positions(w, patch_w)
-        y_list = positions(h, patch_h)
-        z_list = positions(d, patch_d)
+        x_list = positions(W, patch_w)
+        y_list = positions(H, patch_h)
+        z_list = positions(D, patch_d)
 
+        # 5. Parcourir l'IRM par patches
         with torch.no_grad():
             for x in x_list:
                 for y in y_list:
                     for z in z_list:
 
-                        # Extraction du patch
-                        image_patch = image[
+                        image_patch = image_pad[
                             x:x+patch_w,
                             y:y+patch_h,
                             z:z+patch_d
                         ].astype(np.float32)
 
-                        # Conversion en tenseur PyTorch
-                        image_patch_tensor = torch.from_numpy(
+                        patch_tensor = torch.from_numpy(
                             image_patch[np.newaxis, np.newaxis, ...]
-                        ).cuda()
+                        ).to(device)
 
-                        # Prédiction du réseau (version binaire provisoire)
-                        pre_patch = net(image_patch_tensor)[0, 0].cpu().numpy()
+                        # Prédiction du réseau
+                        outputs = net(patch_tensor)
 
-                        # Ajouter la prédiction au volume
+                        # Utiliser la sortie principale
+                        if isinstance(outputs, (list, tuple)):
+                            outputs = outputs[0]
+
+                        # Vérifier les 5 classes
+                        if outputs.shape[1] != 5:
+                            raise ValueError(
+                                "Le réseau doit produire 5 canaux"
+                            )
+
+                        # Conversion des logits en probabilités
+                        proba_patch = torch.softmax(
+                            outputs, dim=1
+                        )[0].cpu().numpy()
+
+                        # 6. Accumuler les 5 cartes
                         predict[
+                            :,
                             x:x+patch_w,
                             y:y+patch_h,
                             z:z+patch_d
-                        ] += pre_patch
+                        ] += proba_patch
 
-                        # Compter combien de fois chaque voxel est prédit
+                        # Compter les passages
                         pre_count[
                             x:x+patch_w,
                             y:y+patch_h,
                             z:z+patch_d
                         ] += 1
-        predict /= pre_count
-        metric_meter.update(dice_score(predict, label))
+
+        # 7. Moyenne des prédictions
+        predict /= np.maximum(
+            pre_count[np.newaxis, ...], 1
+        )
+
+        # 8. Choisir la classe la plus probable
+        predict = np.argmax(
+            predict, axis=0
+        ).astype(np.uint8)
+
+        # 9. Retirer le padding
+        predict = predict[:w, :h, :d]
+
+        # 10. Calculer le Dice multi-classes
+        label = label.astype(np.uint8)
+
+        dices = []
+
+        for classe in range(1, 5):
+            pred_classe = (predict == classe)
+            label_classe = (label == classe)
+
+            somme = pred_classe.sum() + label_classe.sum()
+
+            if somme > 0:
+                intersection = np.logical_and(
+                    pred_classe, label_classe
+                ).sum()
+
+                dice = 2 * intersection / somme
+                dices.append(dice)
+
+        # Moyenne sur les classes présentes
+        mean_dice = np.mean(dices) if dices else 1.0
+        metric_meter.update(mean_dice)
 
     return metric_meter.avg
 
