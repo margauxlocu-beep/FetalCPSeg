@@ -265,6 +265,12 @@ def main(args):
         if iteration % 100 == 0:
             torch.save(net.state_dict(), os.path.join(ckpt_path, "train_{}.pth.gz".format(iteration)))
 
+        torch.save(
+            net.state_dict(),
+            os.path.join(ckpt_path, "test_run.pth")
+        )
+        print("Modèle de test sauvegardé !")
+
 
 if __name__ == '__main__':
 
@@ -274,11 +280,14 @@ if __name__ == '__main__':
 
             self.lr = 1e-3
             self.weight_decay = 1e-4
-            self.batch_size = 4
+            #self.batch_size = 4
+            self.batch_size = 1
 
-            self.num_iteration = 4000
+            #self.num_iteration = 4000
+            self.num_iteration = 2
             self.val_fre = 200
-            self.pre_fre = 20
+            #self.pre_fre = 20
+            self.pre_fre = 1
 
             self.patch_size = (64, 64, 16)
 

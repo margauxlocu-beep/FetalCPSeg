@@ -88,7 +88,7 @@ class TrainGenerator(object):
         self.data_list = data_list
         self.batch_size = batch_size
         self.patch_size = patch_size
-        self.aug = get_augmentation()
+        #self.aug = get_augmentation()
 
     def get_item(self): #pour obtenir un nouveau batch (de patient) d'entraînement
 
@@ -131,9 +131,9 @@ class TrainGenerator(object):
                 image[image > 0] = (zone - mean) / (std + 1e-8)
 
             # here we augment the corresponding data and label
-            data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
-            aug_data = self.aug(**data) #application des mêmes transformations que image et label
-            image, label = aug_data['image'], aug_data['label']
+            #data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
+            #aug_data = self.aug(**data) #application des mêmes transformations que image et label
+            #image, label = aug_data['image'], aug_data['label']
 
             w, h, d = image.shape
 

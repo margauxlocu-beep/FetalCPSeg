@@ -19,23 +19,25 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 output_path = os.path.join('output/')
 
+#test_list = [{"image_path": path} for path in sorted(glob("Data_test/case*/image.nii"))]
 test_list = [
-    {"image_path": path}
-    for path in sorted(glob("Data_test/case*/image.nii"))
-    ]
+    {"image_path": "Data/case13/image.nii"}
+]
 
 # Chargement du réseau
 net = MixAttNet().to(device)
 net.load_state_dict(
     torch.load(
-        output_path + '/ckpt/best_val.pth.gz',
+        #output_path + '/ckpt/best_val.pth.gz',
+        output_path + 'ckpt/test_run.pth',
         map_location=device,
         weights_only=True
     )
 )
 
 patch_size = (64, 64, 16)
-spacing = 4
+#spacing = 4
+spacing = 1
 
 save_path = os.path.join(output_path, 'save_data')
 check_dir(save_path)
@@ -142,9 +144,7 @@ for idx, data_dict in enumerate(test_list):
                         )
 
                     # Transformer les logits en probabilités
-                    proba_patch = torch.softmax(
-                        outputs, dim=1
-                    )[0].cpu().numpy()
+                    proba_patch = outputs[0].cpu().numpy()
 
                     #accumuler les 5 probabilités
                     predict[
