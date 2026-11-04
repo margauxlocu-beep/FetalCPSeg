@@ -156,7 +156,7 @@ def out_stage(in_chan, out_chan):
         nn.Conv3d(in_chan, out_chan, kernel_size=3, padding=1),
         nn.BatchNorm3d(out_chan),
         nn.PReLU(),
-        nn.Conv3d(out_chan, 1, kernel_size=1)
+        nn.Conv3d(out_chan, 5, kernel_size=1)
     )
 
 
@@ -184,14 +184,14 @@ class MixAttNet(nn.Module):
         self.mix2 = Attention(16, 16)
         self.mix3 = Attention(16, 16)
         self.mix4 = Attention(16, 16)
-        self.mix_out1 = nn.Conv3d(16, 1, kernel_size=1)
-        self.mix_out2 = nn.Conv3d(16, 1, kernel_size=1)
-        self.mix_out3 = nn.Conv3d(16, 1, kernel_size=1)
-        self.mix_out4 = nn.Conv3d(16, 1, kernel_size=1)
-        self.down_out1 = nn.Conv3d(16, 1, kernel_size=1)
-        self.down_out2 = nn.Conv3d(16, 1, kernel_size=1)
-        self.down_out3 = nn.Conv3d(16, 1, kernel_size=1)
-        self.down_out4 = nn.Conv3d(16, 1, kernel_size=1)
+        self.mix_out1 = nn.Conv3d(16, 5, kernel_size=1)
+        self.mix_out2 = nn.Conv3d(16, 5, kernel_size=1)
+        self.mix_out3 = nn.Conv3d(16, 5, kernel_size=1)
+        self.mix_out4 = nn.Conv3d(16, 5, kernel_size=1)
+        self.down_out1 = nn.Conv3d(16, 5, kernel_size=1)
+        self.down_out2 = nn.Conv3d(16, 5, kernel_size=1)
+        self.down_out3 = nn.Conv3d(16, 5, kernel_size=1)
+        self.down_out4 = nn.Conv3d(16, 5, kernel_size=1)
         self.out = out_stage(16*4, 64)
 
     def forward(self, x):
