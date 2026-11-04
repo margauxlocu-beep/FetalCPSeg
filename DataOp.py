@@ -30,8 +30,8 @@ def get_list(dir_path): #lit et range les fichiers
     path_list.sort()
 
     #Défini les noms des fichiers
-    image_name = 'image.nii.gz'
-    label_name = 'label.nii.gz'
+    image_name = 'image.nii'
+    label_name = 'label.nii'
 
     #associe images & masques. Création dictionnaire contenant deux associations clé-valeur. On enregistre les chemins aux images
     for path in path_list:
@@ -138,7 +138,7 @@ class TrainGenerator(object):
             w, h, d = image.shape
 
             #Localiser les voxels de la structure à segmenter
-            label_index = np.where(label == 1) #récupère les coordonnées de tous les voxels dont la valeur du masque est égale à 1 (ie voxel dans structure d'intérêt)=> 3 tableaux = coordonnées sur les axes x, y et z
+            label_index = np.where(label > 0) #récupère les coordonnées de tous les voxels dont la valeur du masque est égale à 1 (ie voxel dans structure d'intérêt)=> 3 tableaux = coordonnées sur les axes x, y et z
             length_label = label_index[0].shape[0] #compte le nombre de voxels appartenant à la classe 1
 
             #choisir le centre du patch
@@ -175,9 +175,7 @@ class TrainGenerator(object):
                 z-half_d:z+half_d
             ].astype(np.float32)
             
-            #extraction des patches
-            image_patch = image[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
-            label_patch = label[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
+
 
             #ajout des dimensions aux tableaux (pour réseau convolutif sous PyTorch (taille du batch, nb de cannaux, X,Y, Z) où X,Y,Z sont les dimensions spatiales)
             image_patch_list.append(image_patch[np.newaxis, np.newaxis, ...])
