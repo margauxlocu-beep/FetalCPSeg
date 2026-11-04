@@ -12,7 +12,7 @@ from DataOp import get_list
 
 from glob import glob
 
-torch.cuda.set_device(0)
+
 
 # Utilisation du GPU si disponible, sinon du CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,12 +21,18 @@ output_path = os.path.join('output/')
 
 test_list = [
     {"image_path": path}
-    for path in sorted(glob("Data_test/case*/image.nii.gz"))
+    for path in sorted(glob("Data_test/case*/image.nii"))
     ]
 
 # Chargement du réseau
-net = MixAttNet().cuda()
-net.load_state_dict(torch.load(output_path+'/ckpt/best_val.pth.gz'))
+net = MixAttNet().to(device)
+net.load_state_dict(
+    torch.load(
+        output_path + '/ckpt/best_val.pth.gz',
+        map_location=device,
+        weights_only=True
+    )
+)
 
 patch_size = (64, 64, 16)
 spacing = 4
@@ -98,9 +104,9 @@ for idx, data_dict in enumerate(test_list):
             + [dimension - taille_patch]
         ))
 
-    x_list = positions(w, patch_w)
-    y_list = positions(h, patch_h)
-    z_list = positions(d, patch_d)
+    x_list = positions(W, patch_w)
+    y_list = positions(H, patch_h)
+    z_list = positions(D, patch_d)
     
     start_time = time.time()
 
@@ -110,7 +116,7 @@ for idx, data_dict in enumerate(test_list):
                 for z in z_list:
 
                     # Extraction du patch 64x64x16
-                    image_patch = image[
+                    image_patch = image_pad[
                         x:x+patch_w,
                         y:y+patch_h,
                         z:z+patch_d
@@ -119,7 +125,7 @@ for idx, data_dict in enumerate(test_list):
                     # Conversion en tenseur PyTorch
                     patch_tensor = torch.from_numpy(
                         image_patch[np.newaxis, np.newaxis, ...]
-                    ).cuda()
+                    ).to(device)
 
                     # MODIFICATION 4 : récupérer les 5 classes
                     outputs = net(patch_tensor)
