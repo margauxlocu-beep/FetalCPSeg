@@ -12,6 +12,11 @@ from DataOp import TrainGenerator, get_list
 from Network import MixAttNet
 from Utils import check_dir, AvgMeter, dice_score
 
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+print("Appareil utilisé :", device)
 
 def adjust_lr(optimizer, iteration, num_iteration):
     """
@@ -29,7 +34,7 @@ def adjust_lr(optimizer, iteration, num_iteration):
         pass
 
 
-def loss_func(predict, label, pos_weight):
+def loss_func(predict, label):
     """
     here we define the loss function, which you can upload additional loss in here
     """
@@ -42,8 +47,8 @@ def train_batch(net, optimizer, loader, patch_size, batch_size):
 
     image, label = loader.get_item()
 
-    image = torch.from_numpy(image).float().cuda()
-    label = torch.from_numpy(label).long().cuda()
+    image = torch.from_numpy(image).float().to(device)
+    label = torch.from_numpy(label).long().to(device)
 
     if label.ndim == 5 and label.shape[1] == 1:
         label = label.squeeze(1)
@@ -217,7 +222,8 @@ def val(net, val_list, patch_size):
 
 
 def main(args):
-    torch.cuda.set_device(args.gpu_id)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(args.gpu_id)
 
     check_dir(args.output_path)
     ckpt_path = os.path.join(args.output_path, "ckpt")
@@ -228,7 +234,7 @@ def main(args):
     train_generator = TrainGenerator(train_list,
                                      batch_size=args.batch_size,
                                      patch_size=args.patch_size)
-    net = MixAttNet().cuda()
+    net = MixAttNet().to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     open(os.path.join(args.output_path, "train_record.txt"), 'w+')
