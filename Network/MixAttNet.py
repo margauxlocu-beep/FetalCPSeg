@@ -235,7 +235,7 @@ class MixAttNet(nn.Module):
         if self.training:
             return out, mix_out1, mix_out2, mix_out3, mix_out4, down_out1, down_out2, down_out3, down_out4
         else:
-            return torch.sigmoid(out)
+            return torch.softmax(out, dim=1)
 
 
 if __name__ == '__main__':
