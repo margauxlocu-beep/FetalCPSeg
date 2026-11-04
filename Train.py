@@ -33,7 +33,7 @@ def loss_func(predict, label, pos_weight):
     """
     here we define the loss function, which you can upload additional loss in here
     """
-    bce_loss = F.binary_cross_entropy_with_logits(predict, label, pos_weight=pos_weight)
+    bce_loss = F.cross_entropy(predict, label)
     return bce_loss
 
 
@@ -42,37 +42,19 @@ def train_batch(net, optimizer, loader, patch_size, batch_size):
 
     image, label = loader.get_item()
 
-    # Nombre total de voxels dans le batch
-    nb_voxels = batch_size * np.prod(patch_size)
+    image = torch.from_numpy(image).float().cuda()
+    label = torch.from_numpy(label).long().cuda()
 
-    # Nombre de voxels appartenant à la classe 1
-    nb_positifs = np.count_nonzero(label == 1)
-
-    if nb_positifs == 0:
-        weight = 1
-    else:
-        weight = nb_voxels / nb_positifs
-
-    image = Variable(torch.from_numpy(image).cuda())
-    label = Variable(torch.from_numpy(label).cuda())
+    if label.ndim == 5 and label.shape[1] == 1:
+        label = label.squeeze(1)
 
     predict = net(image)
 
     optimizer.zero_grad()
 
-    weight = torch.FloatTensor([weight]).cuda()
-    loss1 = loss_func(predict[0], label, pos_weight=weight)
-    loss2 = loss_func(predict[1], label, pos_weight=weight)
-    loss3 = loss_func(predict[2], label, pos_weight=weight)
-    loss4 = loss_func(predict[3], label, pos_weight=weight)
-    loss5 = loss_func(predict[4], label, pos_weight=weight)
-    loss6 = loss_func(predict[5], label, pos_weight=weight)
-    loss7 = loss_func(predict[6], label, pos_weight=weight)
-    loss8 = loss_func(predict[7], label, pos_weight=weight)
-    loss9 = loss_func(predict[8], label, pos_weight=weight)
-    loss = loss1 + \
-           0.8*loss2 + 0.7*loss3 + 0.6*loss4 + 0.5*loss5 + \
-           0.8*loss6 + 0.7*loss7 + 0.6*loss8 + 0.5*loss9
+    weights = [1.0, 0.8, 0.7, 0.6, 0.5,0.8, 0.7, 0.6, 0.5]
+
+    loss = sum(w * loss_func(pred, label) for w, pred in zip(weights, predict))
     loss.backward()
     optimizer.step()
     return loss.item()
