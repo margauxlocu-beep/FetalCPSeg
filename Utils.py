@@ -26,14 +26,11 @@ class AvgMeter(object):
         self.avg = self.sum / self.count
 
 
-def dice_score(seg, gt, ratio=0.5):
-    """
-    function to calculate the dice score
-    """
+def dice_score(pred, target, class_id):
     p = (pred == class_id)
     g = (target == class_id)
 
-    intersection = (p & g).sum()
+    intersection = np.logical_and(p, g).sum()
     denominator = p.sum() + g.sum()
 
     if denominator == 0:
