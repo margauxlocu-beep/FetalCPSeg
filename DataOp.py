@@ -112,9 +112,7 @@ class TrainGenerator(object):
 
         image_patch_list = []
         label_patch_list = []
-        
-        image_patch_list = []
-        label_patch_list = []
+    
 
         for image_path, clean_path in zip(image_list, clean_list): #parcours lites et extrait les chemins
             #1. Chargement de l'IRM et du masque
@@ -137,19 +135,37 @@ class TrainGenerator(object):
 
             w, h, d = image.shape
 
-            #Localiser les voxels de la structure à segmenter
-            label_index = np.where(label > 0) #récupère les coordonnées de tous les voxels dont la valeur du masque est égale à 1 (ie voxel dans structure d'intérêt)=> 3 tableaux = coordonnées sur les axes x, y et z
-            length_label = label_index[0].shape[0] #compte le nombre de voxels appartenant à la classe 1
+            # Choisir un centre de patch en équilibrant les classes
 
-            #choisir le centre du patch
             p = random.random()
-            # we set a probability(p) to make most of the center of sampling patches
-            # locate to the regions with label not background
-            if p < 0.875: #Le centre du patch est choisi parmi les voxels dont le masque vaut 1. L'objectif est de privilégier les régions contenant la structure anatomique à apprendre.
-                sample_id = random.randrange(length_label) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
-                x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id] #coordonnées du voxel séléctionné. Il devient le centre théorique du patch.
-            else: #Le centre du patch est choisi aléatoirement dans l'ensemble du volume. Cela permet aussi de sélectionner des régions d'arrière-plan et d'apprendre au réseau à les reconnaître.
-                x, y, z = (random.randrange(w),random.randrange(h),random.randrange(d))
+
+            # Classes anatomiques présentes dans le masque
+            classes_presentes = [
+                c for c in range(1, 5)
+                if np.any(label == c)
+            ]
+
+            if p < 0.875 and classes_presentes:
+
+                # Choisir une classe anatomique au hasard
+                classe = random.choice(classes_presentes)
+
+                # Repérer les voxels de cette classe
+                label_index = np.where(label == classe)
+
+                # Choisir un voxel de cette classe comme centre
+                sample_id = random.randrange(len(label_index[0]))
+
+                x = int(label_index[0][sample_id])
+                y = int(label_index[1][sample_id])
+                z = int(label_index[2][sample_id])
+
+            else:
+                # Choisir aléatoirement un point dans le volume
+                x = random.randrange(w)
+                y = random.randrange(h)
+                z = random.randrange(d)
+
 
             # here we prevent the sampling patch overflow volume
             # Vérifier que le volume est assez grand
@@ -173,7 +189,7 @@ class TrainGenerator(object):
                 x-half_w:x+half_w,
                 y-half_h:y+half_h,
                 z-half_d:z+half_d
-            ].astype(np.float32)
+            ].astype(np.int64)
             
 
 
