@@ -30,8 +30,8 @@ def get_list(dir_path): #lit et range les fichiers
     path_list.sort()
 
     #Défini les noms des fichiers
-    image_name = 'image.nii.gz'
-    label_name = 'label.nii.gz'
+    image_name = 'image.nii'
+    label_name = 'label.nii'
 
     #associe images & masques. Création dictionnaire contenant deux associations clé-valeur. On enregistre les chemins aux images
     for path in path_list:
@@ -81,7 +81,7 @@ class TrainGenerator(object):
         self.data_list = data_list
         self.batch_size = batch_size
         self.patch_size = patch_size
-        self.aug = get_augmentation()
+        #self.aug = get_augmentation()
 
     def get_item(self): #pour obtenir un nouveau batch (de patient) d'entraînement
 
