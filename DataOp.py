@@ -146,10 +146,10 @@ class TrainGenerator(object):
             # we set a probability(p) to make most of the center of sampling patches
             # locate to the regions with label not background
             if p < 0.875: #Le centre du patch est choisi parmi les voxels dont le masque vaut 1. L'objectif est de privilégier les régions contenant la structure anatomique à apprendre.
-                sample_id = random.randint(1, length_label-1) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
+                sample_id = random.randrange(length_label) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
                 x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id] #coordonnées du voxel séléctionné. Il devient le centre théorique du patch.
             else: #Le centre du patch est choisi aléatoirement dans l'ensemble du volume. Cela permet aussi de sélectionner des régions d'arrière-plan et d'apprendre au réseau à les reconnaître.
-                x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d) #sinon centre aléatoire
+                x, y, z = (random.randrange(w),random.randrange(h),random.randrange(d))
 
             # here we prevent the sampling patch overflow volume
             # Vérifier que le volume est assez grand
