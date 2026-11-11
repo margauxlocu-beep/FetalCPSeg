@@ -165,7 +165,7 @@ if __name__ == '__main__':
             self.val_fre = 200
             self.pre_fre = 20
 
-            self.patch_size = 64
+            self.patch_size = (64, 64, 16)
 
             self.data_path = 'Data/'
             self.output_path = 'output/'
