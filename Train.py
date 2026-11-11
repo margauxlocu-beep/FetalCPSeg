@@ -12,6 +12,8 @@ from DataOp import TrainGenerator, get_list
 from Network import MixAttNet
 from Utils import check_dir, AvgMeter, dice_score
 
+from tqdm import tqdm
+
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
@@ -133,50 +135,60 @@ def val(net, val_list, patch_size):
         y_list = positions(H, patch_h)
         z_list = positions(D, patch_d)
 
+        total_patches = len(x_list) * len(y_list) * len(z_list)
+
+        print(f"Validation de {image_path}")
+        print(f"Nombre total de patches : {total_patches}", flush=True)
+
         # 5. Parcourir l'IRM par patches
         with torch.no_grad():
-            for x in x_list:
-                for y in y_list:
-                    for z in z_list:
+            with tqdm(total=total_patches, desc="Validation", unit="patch") as pbar:
+                for x in x_list:
+                    for y in y_list:
+                        for z in z_list:
 
-                        image_patch = image_pad[
-                            x:x+patch_w,
-                            y:y+patch_h,
-                            z:z+patch_d
-                        ].astype(np.float32)
+                            image_patch = image_pad[
+                                x:x+patch_w,
+                                y:y+patch_h,
+                                z:z+patch_d
+                            ].astype(np.float32)
 
-                        patch_tensor = torch.from_numpy(
-                            image_patch[np.newaxis, np.newaxis, ...]
-                        ).to(device)
+                            patch_tensor = torch.from_numpy(
+                                image_patch[np.newaxis, np.newaxis, ...]
+                            ).to(device)
 
-                        # Prédiction du réseau
-                        outputs = net(patch_tensor)
+                            # Prédiction du réseau
+                            outputs = net(patch_tensor)
 
-                        # Utiliser la sortie principale
-                        if isinstance(outputs, (list, tuple)):
-                            outputs = outputs[0]
+                            # Utiliser la sortie principale
+                            if isinstance(outputs, (list, tuple)):
+                                outputs = outputs[0]
 
-                        # Vérifier les 5 classes
-                        if outputs.shape[1] != 5:
-                            raise ValueError(
-                                "Le réseau doit produire 5 canaux"
-                            )
+                            # Vérifier les 5 classes
+                            if outputs.shape[1] != 5:
+                                raise ValueError(
+                                    "Le réseau doit produire 5 canaux"
+                                )
 
-                        
-                        # 6. Accumuler les 5 cartes
-                        predict[
-                            :,
-                            x:x+patch_w,
-                            y:y+patch_h,
-                            z:z+patch_d
-                        ] += proba_patch
+                            # Récupérer les probabilités des 5 classes
+                            proba_patch = outputs[0].cpu().numpy()
 
-                        # Compter les passages
-                        pre_count[
-                            x:x+patch_w,
-                            y:y+patch_h,
-                            z:z+patch_d
-                        ] += 1
+                            
+                            # 6. Accumuler les 5 cartes
+                            predict[
+                                :,
+                                x:x+patch_w,
+                                y:y+patch_h,
+                                z:z+patch_d
+                            ] += proba_patch
+
+                            # Compter les passages
+                            pre_count[
+                                x:x+patch_w,
+                                y:y+patch_h,
+                                z:z+patch_d
+                            ] += 1
+                            pbar.update(1)
 
         # 7. Moyenne des prédictions
         predict /= np.maximum(
@@ -280,10 +292,10 @@ if __name__ == '__main__':
             self.batch_size = 1
 
             #self.num_iteration = 4000
-            self.num_iteration = 2
-            self.val_fre = 200
+            self.num_iteration = 20
+            self.val_fre = 10
             #self.pre_fre = 20
-            self.pre_fre = 1
+            self.pre_fre = 5
 
             self.patch_size = (64, 64, 16)
 
