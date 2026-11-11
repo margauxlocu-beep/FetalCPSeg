@@ -162,11 +162,7 @@ def val(net, val_list, patch_size):
                                 "Le réseau doit produire 5 canaux"
                             )
 
-                        # Conversion des logits en probabilités
-                        proba_patch = torch.softmax(
-                            outputs, dim=1
-                        )[0].cpu().numpy()
-
+                        
                         # 6. Accumuler les 5 cartes
                         predict[
                             :,
