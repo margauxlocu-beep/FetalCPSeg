@@ -43,8 +43,8 @@ def get_list(dir_path): #lit et range les fichiers
         )
 
     # we split the data set to train set(0.75), val set(0.05), test set(0.2)
-    train_ratio = 0.75 #75% des cas pour l'entraînement
-    val_ratio = 0.8 # Attention : 80% == limite set test + set validation donc 5% de val et donc bien 20% de test 
+    train_ratio = 0.75
+    val_ratio = 1.0 
     train_num = round(len(dict_list)*train_ratio)
     val_num = round(len(dict_list)*val_ratio)
     #slicing du data set
