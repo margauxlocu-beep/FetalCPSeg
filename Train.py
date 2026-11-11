@@ -120,7 +120,8 @@ def val(net, val_list, patch_size):
 
         # 4. Positions des patches
         def positions(dimension, taille_patch):
-            pas = max(1, taille_patch // 4)
+            #pas = max(1, taille_patch // 4)
+            pas = max(1, taille_patch)
 
             return sorted(set(
                 list(range(
@@ -222,9 +223,20 @@ def val(net, val_list, patch_size):
                 dice = 2 * intersection / somme
                 dices.append(dice)
 
+                print(
+                f"Classe {classe} : Dice = {dice:.4f}",
+                flush=True
+                )
+
         # Moyenne sur les classes présentes
         mean_dice = np.mean(dices) if dices else 1.0
         metric_meter.update(mean_dice)
+
+        print(
+            f"IRM {os.path.basename(os.path.dirname(image_path))} "
+            f"| Dice moyen = {mean_dice:.4f}",
+            flush=True
+        )
 
     return metric_meter.avg
 
@@ -273,11 +285,11 @@ def main(args):
         if iteration % 100 == 0:
             torch.save(net.state_dict(), os.path.join(ckpt_path, "train_{}.pth.gz".format(iteration)))
 
-        torch.save(
-            net.state_dict(),
-            os.path.join(ckpt_path, "test_run.pth")
-        )
-        print("Modèle de test sauvegardé !")
+        #torch.save(
+        #    net.state_dict(),
+        #    os.path.join(ckpt_path, "test_run.pth")
+        #)
+        #print("Modèle de test sauvegardé !")
 
 
 if __name__ == '__main__':
