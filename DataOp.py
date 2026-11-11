@@ -95,7 +95,12 @@ class TrainGenerator(object):
         return image_patch, label_patch # retourne deux tableaux
 
     def _sample_patch(self, image_list, clean_list): #extractions des patches 3D
-        half_size = self.patch_size // 2
+        patch_w, patch_h, patch_d = self.patch_size
+
+        half_w = patch_w // 2
+        half_h = patch_h // 2
+        half_d = patch_d // 2
+
         image_patch_list = []
         label_patch_list = []
 
@@ -104,45 +109,58 @@ class TrainGenerator(object):
             label = nib.load(clean_path).get_fdata() #Les deux volumes doivent avoir des dimensions compatibles et être spatialement alignés (label et image)
 
             # here we augment the corresponding data and label
-            data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
-            aug_data = self.aug(**data) #application des mêmes transformations que image et label
-            image, label = aug_data['image'], aug_data['label']
+            #data = {'image': image, 'label': label} #dico avec image et masque de segmentation associé
+            #aug_data = self.aug(**data) #application des mêmes transformations que image et label
+            #image, label = aug_data['image'], aug_data['label']
+
+            #Normalisation
+            image = image.astype(np.float32)
+            zone = image[image > 0]
+            if zone.size > 0:
+                mean = zone.mean()
+                std = zone.std()
+                image[image > 0] = (zone - mean) / (std + 1e-8)
 
             w, h, d = image.shape
 
-            #Localiser les voxels de la structure à segmenter
-            label_index = np.where(label == 1) #récupère les coordonnées de tous les voxels dont la valeur du masque est égale à 1 (ie voxel dans structure d'intérêt)=> 3 tableaux = coordonnées sur les axes x, y et z
-            length_label = label_index[0].shape[0] #compte le nombre de voxels appartenant à la classe 1
-
-            #choisir le centre du patch
             p = random.random()
-            # we set a probability(p) to make most of the center of sampling patches
-            # locate to the regions with label not background
-            if p < 0.875: #Le centre du patch est choisi parmi les voxels dont le masque vaut 1. L'objectif est de privilégier les régions contenant la structure anatomique à apprendre.
-                sample_id = random.randint(1, length_label-1) #choisit un indice aléatoire parmi les voxels appartenant à la classe 1
-                x, y, z = label_index[0][sample_id], label_index[1][sample_id], label_index[2][sample_id] #coordonnées du voxel séléctionné. Il devient le centre théorique du patch.
-            else: #Le centre du patch est choisi aléatoirement dans l'ensemble du volume. Cela permet aussi de sélectionner des régions d'arrière-plan et d'apprendre au réseau à les reconnaître.
-                x, y, z = random.randint(0, w), random.randint(0, h), random.randint(0, d) #sinon centre aléatoire
+
+            classes_presentes = [
+                c for c in range(1, 5)
+                if np.any(label == c)
+            ]
+
+            if p < 0.875 and classes_presentes:
+                classe = random.choice(classes_presentes)
+                label_index = np.where(label == classe)
+                sample_id = random.randrange(len(label_index[0]))
+                x = int(label_index[0][sample_id])
+                y = int(label_index[1][sample_id])
+                z = int(label_index[2][sample_id])
+            else:
+                x = random.randrange(w)
+                y = random.randrange(h)
+                z = random.randrange(d)
 
             # here we prevent the sampling patch overflow volume
-            if x < half_size:
-                x = half_size
-            elif x > w-half_size:
-                x = w-half_size-1
+            if w < patch_w or h < patch_h or d < patch_d:
+                raise ValueError("Volume plus petit que le patch demandé")
 
-            if y < half_size:
-                y = half_size
-            elif y > h-half_size:
-                y = h-half_size-1
+            x = max(half_w, min(int(x), w - half_w))
+            y = max(half_h, min(int(y), h - half_h))
+            z = max(half_d, min(int(z), d - half_d))
 
-            if z < half_size:
-                z = half_size
-            elif z > d-half_size:
-                z = d-half_size-1
-            
-            #extraction des patches
-            image_patch = image[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
-            label_patch = label[x-half_size:x+half_size, y-half_size:y+half_size, z-half_size:z+half_size].astype(np.float32)
+            image_patch = image[
+                x-half_w:x+half_w,
+                y-half_h:y+half_h,
+                z-half_d:z+half_d
+            ].astype(np.float32)
+
+            label_patch = label[
+                x-half_w:x+half_w,
+                y-half_h:y+half_h,
+                z-half_d:z+half_d
+            ].astype(np.int64)
 
             #ajout des dimensions aux tableaux (pour réseau convolutif sous PyTorch (taille du batch, nb de cannaux, X,Y, Z) où X,Y,Z sont les dimensions spatiales)
             image_patch_list.append(image_patch[np.newaxis, np.newaxis, ...])
