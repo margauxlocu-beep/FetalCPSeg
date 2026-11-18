@@ -67,7 +67,7 @@ def train_batch(net, optimizer, loader, patch_size, batch_size):
     return loss.item()
 
 
-def val(net, val_list, patch_size):
+def val(net, val_list, patch_size, save_dir=None):
     net.eval()
     metric_meter = AvgMeter()
     device = next(net.parameters()).device
@@ -203,6 +203,26 @@ def val(net, val_list, patch_size):
 
         # 9. Retirer le padding
         predict = predict[:w, :h, :d]
+
+        if save_dir is not None:
+            case_name = os.path.basename(os.path.dirname(image_path))
+            case_dir = os.path.join(save_dir, case_name)
+            os.makedirs(case_dir, exist_ok=True)
+
+            source = nib.load(image_path)
+            header = source.header.copy()
+            header.set_data_dtype(np.uint8)
+
+            segmentation = nib.Nifti1Image(
+                predict,
+                affine=source.affine,
+                header=header
+            )
+
+            nib.save(
+                segmentation,
+                os.path.join(case_dir, "predict.nii.gz")
+            )
 
         # 10. Calculer le Dice multi-classes
         label = label.astype(np.uint8)
