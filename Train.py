@@ -304,15 +304,15 @@ if __name__ == '__main__':
             self.batch_size = 1
 
             #self.num_iteration = 4000
-            self.num_iteration = 20
-            self.val_fre = 10
+            self.num_iteration = 100
+            self.val_fre = 20
             #self.pre_fre = 20
-            self.pre_fre = 5
+            self.pre_fre = 10
 
             self.patch_size = (64, 64, 16)
 
             self.data_path = 'Data/'
-            self.output_path = 'output/'
+            self.output_path = 'output_100/'
 
     parser = Parser()
     main(parser)
